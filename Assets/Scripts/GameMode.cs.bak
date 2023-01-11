@@ -1,0 +1,197 @@
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+using UnityEngine.UI;
+using TMPro;
+
+public class GameMode : MonoBehaviour
+{
+    public static GameMode Instance { get; private set; }
+
+    public Controller PlayerOne;
+    public Controller PlayerTwo;
+
+    public TMP_Text round;
+    public TMP_Text time;
+
+    int PlayerOnePoints;
+    int PlayerTwoPoints;
+
+    public TMP_Text playerOnePointsText;
+    public TMP_Text playerTwoPointsText;
+
+    int NumberOfRound;
+
+    Coroutine RoundTimerCoroutine;
+
+    private void Awake()
+    {
+        if (Instance != null && Instance != this)
+        {
+            Destroy(this);
+        }
+        else
+        {
+            Instance = this;
+        }
+
+        if (GameOptionsSettings.Instance != null)
+        {
+            PlayerTwo.isABot = GameOptionsSettings.Instance.UseBots;
+        }
+    }
+
+    private void Start()
+    {
+        StartRound();
+    }
+
+    void StartRound()
+    {
+        //We tell each player that they are ready to select an ability
+        PlayerOne.bChoosedAbility = false;
+        PlayerOne.abilityController.ResetSelection();
+
+        PlayerTwo.bChoosedAbility = false;
+        PlayerTwo.abilityController.ResetSelection();
+
+        NumberOfRound++;
+        round.text = NumberOfRound.ToString();
+
+        //Start round countdown, by default 20
+        RoundTimerCoroutine = StartCoroutine(RoundCountDown(20));
+
+        //On start round, if player one or two is a bot, we tell him to pick a random ability
+        if (PlayerOne.isABot)
+        {
+            Debug.Log("Beep Boop");
+            PlayerOne.PickRandomAbility();
+        }
+
+        if (PlayerTwo.isABot)
+        {
+            Debug.Log("Beep Boop");
+            PlayerTwo.PickRandomAbility();
+        }
+    }
+
+    void NextRound()
+    {
+        //On Next Round start, tell players that they can choose abilities
+        PlayerOne.CanSelectAbility(true);
+        PlayerTwo.CanSelectAbility(true);
+        
+        StartRound();
+    }
+
+    IEnumerator RoundCountDown(float TimeCountDown)
+    {
+        while (TimeCountDown > 0)
+        {
+            TimeCountDown -= Time.deltaTime;
+
+            int timeRounded = Mathf.RoundToInt(TimeCountDown);
+            timeRounded = Mathf.Clamp(timeRounded, 0, (int)TimeCountDown);
+            time.text = timeRounded.ToString();
+
+            //if time hits 0 and the players never choose a ability, we choose a random ability for them
+            if (TimeCountDown <= 0) 
+            {
+                if (!PlayerOne.bChoosedAbility && !PlayerOne.isABot) 
+                {
+                    PlayerOne.PickRandomAbility();
+                }
+
+                if (PlayerTwo.bChoosedAbility && !PlayerTwo.isABot)
+                {
+                    PlayerTwo.PickRandomAbility();
+                }
+            }
+
+            yield return new WaitForEndOfFrame();
+        }
+    }
+
+    //This will be called every time one of the players chooses an ability
+    //Once it detects that both of the players choose ability, we start round process
+    public void OnPlayerAbilityChose()
+    {
+        //if both of the players choose ability
+        if (PlayerOne.bChoosedAbility && PlayerTwo.bChoosedAbility)
+        {
+            StopCoroutine(RoundTimerCoroutine);
+
+            //We tell players to start shuffling their hands to reveal option
+            PlayerOne.playerHand.StartHandShuffle();
+            PlayerTwo.playerHand.StartHandShuffle();
+
+            StartCoroutine(EndRound());
+        }
+    }
+
+    IEnumerator EndRound() 
+    {
+        yield return new WaitForSeconds(1);
+
+        CalculateMatch();
+
+        yield return null;
+    }
+
+    void CalculateMatch() 
+    {
+        int PlayerOneAbilityIndex = (int)this.PlayerOne.SelectedAbility;
+        int PlayerTwoAbilityIndex = (int)this.PlayerTwo.SelectedAbility;
+
+        //This could be better
+        /*
+         * The formula to choose the winner is that, the option who is on top wins vs the bottom one, but they repeat if out of bound to start from the bottom. 
+         * Example: 
+         * 0 - Rock wins vs 2 - Scissor
+         * 1 - Paper wins 0 - Rock
+         * 2 - Scissors wins vs 1 - Paper
+         * 
+         */
+
+        //Once we detect the winer, we add one point to its score
+        if ((PlayerOneAbilityIndex == 0 && PlayerTwoAbilityIndex == 2) || (PlayerOneAbilityIndex == 1 && PlayerTwoAbilityIndex == 0) || (PlayerOneAbilityIndex == 2 && PlayerTwoAbilityIndex == 1))
+        {
+            AddScoreToPlayerOne();
+            Debug.Log("Player One Won!");
+        }
+
+        if ((PlayerOneAbilityIndex == 0 && PlayerTwoAbilityIndex == 1 ) || (PlayerOneAbilityIndex == 1 && PlayerTwoAbilityIndex == 2) || (PlayerOneAbilityIndex == 2 && PlayerTwoAbilityIndex == 0)) 
+        {
+            AddScoreToPlayerTwo();
+            Debug.Log("Player Two Won");
+        }
+
+
+        //If its a tie, we dont add any points
+        if (PlayerOne == PlayerTwo)
+        {
+            Debug.Log("Its a TIE!");
+        }
+
+        //End Round
+        OnRoundEnd();
+    }
+
+    void AddScoreToPlayerOne() 
+    {
+        PlayerOnePoints++;
+        playerOnePointsText.text = PlayerOnePoints.ToString();
+    }
+
+    void AddScoreToPlayerTwo() 
+    {
+        PlayerTwoPoints++;
+        playerTwoPointsText.text = PlayerTwoPoints.ToString();
+    }
+
+    void OnRoundEnd() 
+    {
+        //Start a compleate new round!
+        NextRound();
+    }
+}
